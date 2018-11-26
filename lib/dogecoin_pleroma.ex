@@ -101,7 +101,8 @@ defmodule DogecoinPleroma do
     use GenServer
 
     def start_link do
-      GenServer.start_link(__MODULE__, %{})
+      {:ok, %{"access_token" => access_token}} = Pleroma.log_in
+      GenServer.start_link(__MODULE__, %{access_token: access_token})
     end
 
     @impl true

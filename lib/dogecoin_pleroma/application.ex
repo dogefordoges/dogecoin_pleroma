@@ -10,6 +10,7 @@ defmodule DogecoinPleroma.Application do
     children = [
       # Starts a worker by calling: DogecoinPleroma.Worker.start_link(arg)
       {DogecoinPleroma.AccountStorage, []},
+      {DogecoinPleroma.Bot, []}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
