@@ -23,3 +23,5 @@ erl_crash.dump
 dogecoin_pleroma-*.tar
 
 accounts
+
+config/secret.exs

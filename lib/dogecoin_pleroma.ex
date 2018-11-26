@@ -32,4 +32,12 @@ defmodule DogecoinPleroma do
       end           
     end
   end
+
+  def valid_address?(address) do
+    with {:ok, %{"isvalid" => validity}} = Dogex.valid_password(address) do
+      validity
+    else
+      {:error, reason} -> {:error, reason}
+    end
+  end
 end
