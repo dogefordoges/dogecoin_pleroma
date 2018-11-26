@@ -12,4 +12,15 @@ defmodule DogecoinPleromaTest do
   test "lookup non existent key" do
     assert AccountStorage.lookup("bar") == :error
   end
+
+  test "valid password" do
+    {:ok, valid} = DogecoinPleroma.valid_address?("DDvzm2WfH1tNidyfTGvNtKBiSTp1hi54Zr")
+    assert valid == true
+  end
+
+  test "invalid password" do
+    {:ok, valid} = DogecoinPleroma.valid_address?("foobar")
+    assert valid == false
+  end
+
 end
