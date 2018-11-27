@@ -67,20 +67,28 @@ defmodule DogecoinPleroma do
       Jason.decode!(body)
     end
 
-    def get_direct_statuses(token) do
+    def get_direct_statuses(token, id \\ nil) do
+      url =
+      if id do
+	"/api/v1/timelines/direct?since_id=#{id}"
+      else
+	"/api/v1/timelines/direct"
+      end
+      
       {:ok, %{:body => body}} = HTTPoison.get(
-	Application.get_env(:dogecoin_pleroma, :url) <> "/api/v1/timelines/direct",
+	Application.get_env(:dogecoin_pleroma, :url) <> url,
 	[{"Authorization", "Bearer #{token}"}]
       )
       Jason.decode!(body)
     end
 
-    def send_direct_status(token, status) do
+    def send_direct_status(token, status, id \\ nil) do
       {:ok, %{:body => body}} = post(
 	"/api/v1/statuses",
 	%{
 	  "status" => status,
-	  "visibility" => "direct"	  
+	  "visibility" => "direct",
+	  "in_reply_to_id" => id
 	},
 	[{"Authorization", "Bearer #{token}"}]
       )
@@ -100,9 +108,9 @@ defmodule DogecoinPleroma do
   defmodule Bot do
     use GenServer
 
-    def start_link do
-      {:ok, %{"access_token" => access_token}} = Pleroma.log_in
-      GenServer.start_link(__MODULE__, %{access_token: access_token})
+    def start_link(_state) do
+      IO.puts "Logged into dogecoin"
+      GenServer.start_link(__MODULE__, %{})
     end
 
     @impl true
@@ -111,15 +119,98 @@ defmodule DogecoinPleroma do
       {:ok, state}
     end
 
+    def process_status(status) do
+      %{
+	"id" => id,
+	"account" => %{
+	  "url" => url
+	}
+	"content" => content
+      } = status
+
+      {id, process_url(url), process_content(content)}
+    end
+
+    def process_content(content) do
+      s = String.split(content, "</span>")
+      Enum.at(s, -1) |> String.trim      
+    end
+
+    def process_url(url) do
+      s = String.split(url)
+      {Enum.at(s, 2), Enum.at(s, 4)} # { domain, username }
+    end
+
+    def execute_response(credentials, {id, {domain, username}, content}) do
+      
+      access_token = Map.get(credentials, "access_token")
+
+      tokens = String.split(content, " ")
+      command = Enum.first(tokens)
+      
+      case command do
+	"register" -> register_response(access_token, id, domain, username, tokens)
+	"search" -> search_response(access_token, id, domain, username, tokens) 
+	_ -> default_response(access_token, id)
+      end
+    end
+
+    def register_response(access_token, id, domain, username, tokens) do
+      address = Enum.at(tokens, 1)
+      url = "#{username}@#{domain}"
+      if DogecoinPleroma.valid_address?(address) do
+	AccountStorage.insert(url, address)
+	Pleroma.send_direct_message(
+	  access_token,
+	  "@#{url} registered #{address} to #{url} much wow!",
+	  id
+	)
+      else
+	Pleroma.send_direct_message(
+	  access_token,
+	  "@#{url} #{address} is not a valid :doge: address!",
+	  id
+	)
+      end            
+    end
+
+    def search_response(access_token, id, domain, username, tokens) do
+      url = "#{username}@#{domain}"
+      case AccountStorage.lookup(url) do
+	:error -> Pleroma.send_direct_status(access_token, "@#{url} is not registered!", id)
+	address -> Pleroma.send_direct_status(access_token, "@#{url} address", id)
+      end
+    end
+
+    def default_response(access_token, domain, username, id) do
+      url = "#{username}@#{domain}"      
+      Pleroma.send_direct_status(access_token, "@#{url} i don't understand... many sads", id)
+    end
+
     @impl true
     def handle_info(:work, state) do
+
+      credentials = Pleroma.log_in
+
+      statuses =
+	credentials
+      |> Map.get("access_token")
+      |> Pleroma.get_direct_statuses(Map.get(state, :id))
+      |> Enum.map(&process_status/1)
+
+      {id, _domain_username, _content} = Enum.first(statuses)
+
+      Enum.each(statuses, fn status ->
+	Task.async(fn -> execute_response(credentials, status) end)
+      end)
+      
       # Do the desired work here
       schedule_work() # Reschedule once more
-      {:noreply, state}
+      {:noreply, Map.put(state, :id, id)}
     end
 
     defp schedule_work() do
       Process.send_after(self(), :work, 30_000) # In 30 seconds
     end
-  end  
+  end
 end
