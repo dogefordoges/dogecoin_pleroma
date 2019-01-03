@@ -14,7 +14,7 @@ defmodule DogecoinPleroma.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      applications: [:dogex, :httpoison],
+      applications: [:httpoison],
       extra_applications: [:logger],
       mod: {DogecoinPleroma.Application, []}
     ]
